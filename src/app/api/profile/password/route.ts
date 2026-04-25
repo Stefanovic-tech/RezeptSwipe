@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { handle, jsonOk } from "@/lib/http";
-import { requireUser, clearAuthCookies } from "@/lib/session";
+import { requireUserForApi, clearAuthCookies } from "@/lib/session";
 import { changePassword, passwordSchema } from "@/lib/auth-actions";
 
 const schema = z.object({
@@ -10,7 +10,7 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     const body = schema.parse(await req.json());
     await changePassword(user.id, body.oldPassword, body.newPassword);
     clearAuthCookies();

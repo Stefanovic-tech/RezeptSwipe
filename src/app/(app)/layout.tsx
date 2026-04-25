@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, redirectIfNoSessionButMaybeRefreshable } from "@/lib/session";
 import AppHeader from "@/components/AppHeader";
-import BottomNav from "@/components/BottomNav";
 import { listUserHouseholds } from "@/lib/auth-actions";
 import { getHousehold } from "@/lib/households";
 
@@ -14,7 +12,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirectIfNoSessionButMaybeRefreshable();
 
   const households = await listUserHouseholds(user.id);
   const currentHousehold =
@@ -50,10 +48,9 @@ export default async function AppLayout({
           role: h.role,
         }))}
       />
-      <main className="flex-1 pb-20 pt-2 px-4 max-w-3xl mx-auto w-full">
+      <main className="flex-1 pb-6 pt-2 px-4 max-w-3xl mx-auto w-full">
         {children}
       </main>
-      <BottomNav isAdmin={user.isAdmin} />
     </div>
   );
 }

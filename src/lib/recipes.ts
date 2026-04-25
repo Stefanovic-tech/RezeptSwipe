@@ -49,9 +49,10 @@ export interface RecipeDetail extends RecipeListItem {
   steps: string[];
 }
 
-function parseIngredients(json: string): Ingredient[] {
+function parseIngredients(json: unknown): Ingredient[] {
   try {
-    const parsed = JSON.parse(json);
+    const raw = typeof json === "string" ? json : JSON.stringify(json ?? []);
+    const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.map((p) => ({
       name: String(p?.name ?? ""),
@@ -66,9 +67,10 @@ function parseIngredients(json: string): Ingredient[] {
   }
 }
 
-function parseSteps(json: string): string[] {
+function parseSteps(json: unknown): string[] {
   try {
-    const parsed = JSON.parse(json);
+    const raw = typeof json === "string" ? json : JSON.stringify(json ?? []);
+    const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed.map(String);
     return [];
   } catch {
@@ -94,9 +96,62 @@ export function rowToListItem(row: RecipeRow): RecipeListItem {
 export function rowToDetail(row: RecipeRow): RecipeDetail {
   return {
     ...rowToListItem(row),
-    ingredients: parseIngredients(row.ingredients_json),
-    steps: parseSteps(row.steps_json),
+    ingredients: parseIngredients(row.ingredients_json as unknown),
+    steps: parseSteps(row.steps_json as unknown),
   };
+}
+
+export type RezeptPageView =
+  | {
+      mode: "edit";
+      recipe: RecipeDetail & {
+        createdBy: number | null;
+        createdByUsername: string | null;
+      };
+    }
+  | { mode: "readonly"; recipe: RecipeDetail; source: string };
+
+/**
+ * Rezept fuer /rezepte/[id]: globale Eintraege (z. B. TheMealDB) oder Haushalts-Rezepte.
+ * Bearbeitbar nur eigene Custom-Rezepte im aktuellen Haushalt.
+ */
+export async function getHouseholdRecipeView(
+  userId: number,
+  householdId: number,
+  recipeId: number
+): Promise<RezeptPageView | null> {
+  await ensureMembership(userId, householdId);
+  interface Row extends RecipeRow, RowDataPacket {
+    household_id: number | null;
+    created_by: number | null;
+    created_by_username: string | null;
+  }
+  const r = await queryOne<Row>(
+    `SELECT r.id, r.source, r.external_id, r.title_de, r.title_orig, r.image_url, r.category,
+            r.area, r.tags, r.is_vegetarian, r.is_vegan, r.has_pork, r.effort, r.est_minutes,
+            r.ingredients_json, r.steps_json, r.household_id, r.created_by,
+            u.username AS created_by_username
+       FROM recipe_cache r
+       LEFT JOIN users u ON u.id = r.created_by
+      WHERE r.id = ?
+        AND (r.household_id IS NULL OR r.household_id = ?)
+      LIMIT 1`,
+    [recipeId, householdId]
+  );
+  if (!r) return null;
+
+  const detail = rowToDetail(r);
+  if (r.household_id === householdId && r.source === "custom") {
+    return {
+      mode: "edit",
+      recipe: {
+        ...detail,
+        createdBy: r.created_by,
+        createdByUsername: r.created_by_username,
+      },
+    };
+  }
+  return { mode: "readonly", recipe: detail, source: r.source };
 }
 
 export async function getRecipeDetail(recipeId: number): Promise<RecipeDetail | null> {

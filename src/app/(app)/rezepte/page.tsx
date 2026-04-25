@@ -29,7 +29,7 @@ export default async function RezepteListPage() {
         <div>
           <h1 className="text-xl font-semibold">Rezepte</h1>
           <p className="text-sm text-neutral-600 dark:text-neutral-300">
-            Swipe-Historie deines Haushalts und eigene Rezepte zum Bearbeiten.
+            Swipe-Historie und eigene Rezepte — Titel antippen oeffnet die Ansicht.
           </p>
         </div>
         <Link href="/rezepte/neu" className="btn btn-primary shrink-0 self-start sm:self-auto">
@@ -52,7 +52,10 @@ export default async function RezepteListPage() {
           <ul className="space-y-2">
             {swipeHistory.map((h) => (
               <li key={h.recipeId} className="card overflow-hidden">
-                <div className="flex gap-3 p-3">
+                <Link
+                  href={`/rezepte/${h.recipeId}`}
+                  className="flex gap-3 p-3 no-underline text-inherit hover:bg-neutral-50 dark:hover:bg-neutral-800/60 transition-colors"
+                >
                   <div className="relative w-24 shrink-0 aspect-square rounded-lg overflow-hidden bg-neutral-200 dark:bg-neutral-800">
                     {h.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -69,16 +72,9 @@ export default async function RezepteListPage() {
                   </div>
                   <div className="min-w-0 flex-1 flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      {h.isCustom ? (
-                        <Link
-                          href={`/rezepte/${h.recipeId}`}
-                          className="font-semibold leading-tight text-brand-600 dark:text-brand-300 hover:underline"
-                        >
-                          {h.title}
-                        </Link>
-                      ) : (
-                        <span className="font-semibold leading-tight">{h.title}</span>
-                      )}
+                      <span className="font-semibold leading-tight text-brand-600 dark:text-brand-300">
+                        {h.title}
+                      </span>
                       <span
                         className={
                           h.status === "liked"
@@ -101,7 +97,7 @@ export default async function RezepteListPage() {
                       {h.area ? <span className="badge">{h.area}</span> : null}
                     </div>
                   </div>
-                </div>
+                </Link>
               </li>
             ))}
           </ul>

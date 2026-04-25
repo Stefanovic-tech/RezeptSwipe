@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginForm({ next }: { next?: string }) {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +23,9 @@ export default function LoginForm({ next }: { next?: string }) {
         setError(data?.error?.message ?? "Anmeldung fehlgeschlagen.");
         return;
       }
-      router.push(next ?? "/swipe");
-      router.refresh();
+      // Voller Seitenwechsel: Set-Cookie vom Login-Response ist im naechsten Request garantiert
+      // (router.push + router.refresh kann RSC vor Cookie-Jar ausloesen).
+      window.location.assign(next ?? "/swipe");
     } catch {
       setError("Verbindung fehlgeschlagen. Bitte erneut versuchen.");
     } finally {

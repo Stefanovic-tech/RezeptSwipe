@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function RedeemForm() {
-  const router = useRouter();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +22,7 @@ export default function RedeemForm() {
         setError(data?.error?.message ?? "Konnte Code nicht einloesen.");
         return;
       }
-      router.push("/swipe");
-      router.refresh();
+      window.location.assign("/swipe");
     } finally {
       setBusy(false);
     }

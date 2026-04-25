@@ -245,7 +245,7 @@ export default function SwipeDeck({
                 style={{
                   transform: isTop ? transform : `translate3d(0, ${idx * 6}px, 0) scale(${1 - idx * 0.03})`,
                   transition: isTop && !dragState.current ? "transform 250ms ease" : undefined,
-                  zIndex: 100 - idx,
+                  zIndex: 10 - idx,
                   pointerEvents: isTop ? "auto" : "none",
                 }}
                 onPointerDown={isTop ? onPointerDown : undefined}
@@ -394,16 +394,16 @@ function EmptyDeck({
   if (hint === "no_seed") {
     return (
       <div className="absolute inset-0 card flex flex-col items-center justify-center text-center p-6 gap-3">
-        <p className="text-lg font-medium">Noch keine Standardrezepte in der Datenbank</p>
+        <p className="text-lg font-medium">Noch keine Rezepte in der Datenbank</p>
         <p className="text-sm text-neutral-500">
-          Migrationen legen nur Tabellen an. Bitte einmal im Projektordner ausfuehren:
+          Der Seed laedt Vorschlaege von TheMealDB. Bitte einmal im Projektordner ausfuehren:
         </p>
         <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded">
           npm run seed
         </code>
         <p className="text-xs text-neutral-500">
-          Danach Seite neu laden. Unter Windows reicht auch <code>start.bat</code> (fuellt
-          Rezepte nach dem Migrieren automatisch auf).
+          Danach Seite neu laden. Unter Windows ruft <code>start.bat</code> den Seed nach den
+          Migrationen auf.
         </p>
       </div>
     );

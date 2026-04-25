@@ -1,5 +1,5 @@
 import { handle, jsonOk } from "@/lib/http";
-import { ApiError, requireUser } from "@/lib/session";
+import { ApiError, requireUserForApi } from "@/lib/session";
 import {
   customRecipeInputSchema,
   deleteCustomRecipe,
@@ -17,7 +17,7 @@ function parseId(raw: string): number {
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) throw new ApiError(400, "Kein Haushalt ausgewaehlt.");
     const recipe = await getCustomRecipe(user.id, user.currentHouseholdId, parseId(params.id));
     return jsonOk(recipe);
@@ -26,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) throw new ApiError(400, "Kein Haushalt ausgewaehlt.");
     const input = customRecipeInputSchema.parse(await req.json());
     await updateCustomRecipe(user.id, user.currentHouseholdId, parseId(params.id), input);
@@ -36,7 +36,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) throw new ApiError(400, "Kein Haushalt ausgewaehlt.");
     await deleteCustomRecipe(user.id, user.currentHouseholdId, parseId(params.id));
     return jsonOk({ ok: true });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { handle, jsonOk } from "@/lib/http";
-import { requireUser } from "@/lib/session";
+import { requireUserForApi } from "@/lib/session";
 import { deleteItem, setItemChecked } from "@/lib/shopping";
 
 const schema = z.object({ checked: z.boolean() });
@@ -10,7 +10,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) return jsonOk({ ok: false });
     const body = schema.parse(await req.json());
     await setItemChecked(user.id, user.currentHouseholdId, Number(params.id), body.checked);
@@ -23,7 +23,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) return jsonOk({ ok: false });
     await deleteItem(user.id, user.currentHouseholdId, Number(params.id));
     return jsonOk({ ok: true });

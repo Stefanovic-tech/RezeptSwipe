@@ -1,5 +1,5 @@
 import { handle, jsonOk } from "@/lib/http";
-import { requireUser } from "@/lib/session";
+import { requireUserForApi } from "@/lib/session";
 import { revokeInvite } from "@/lib/households";
 
 export async function DELETE(
@@ -7,7 +7,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     await revokeInvite(user.id, Number(params.id));
     return jsonOk({ ok: true });
   });

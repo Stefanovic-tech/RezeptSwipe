@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { env } from "./env";
 import { execute, query, queryOne, withTransaction, type RowDataPacket } from "./db";
 import { randomToken, sha256Hex } from "./hash";
@@ -252,10 +253,19 @@ async function tryFromAccessCookie(): Promise<SessionUser | null> {
   return toSessionUser(user);
 }
 
+/**
+ * Nur Access-Cookie (JWT). Kein Refresh, keine Cookie-Mutation —
+ * darf in Server Components, Layouts und Pages verwendet werden.
+ * Refresh passiert in Middleware (/api/auth/refresh) oder in Route Handlern.
+ */
 export async function getCurrentUser(): Promise<SessionUser | null> {
-  const direct = await tryFromAccessCookie();
-  if (direct) return direct;
+  return tryFromAccessCookie();
+}
 
+/**
+ * Refresh-Rotation + Set-Cookie. Nur in Route Handlern oder Server Actions aufrufen.
+ */
+export async function tryRefreshSessionCookies(): Promise<SessionUser | null> {
   const refresh = cookies().get(REFRESH_COOKIE)?.value;
   if (!refresh) return null;
 
@@ -277,9 +287,36 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   return result.user;
 }
 
+/** Session mit Refresh; nur fuer API-Route-Handler. */
+export async function requireUserForApi(): Promise<SessionUser> {
+  let user = await getCurrentUser();
+  if (!user) user = await tryRefreshSessionCookies();
+  if (!user) throw new ApiError(401, "Nicht angemeldet.");
+  return user;
+}
+
+export async function requireAdminForApi(): Promise<SessionUser> {
+  const user = await requireUserForApi();
+  if (!user.isAdmin) throw new ApiError(403, "Adminrechte erforderlich.");
+  return user;
+}
+
+/**
+ * Fuer Server Components: Access-JWT; falls abgelaufen aber Refresh-Cookie da,
+ * Redirect auf /api/auth/refresh (Cookie-Mutation nur dort).
+ * Middleware setzt x-pathname fuer ?next=.
+ */
+export function redirectIfNoSessionButMaybeRefreshable(): never {
+  if (cookies().get(REFRESH_COOKIE)?.value) {
+    const nextPath = headers().get("x-pathname") || "/swipe";
+    redirect(`/api/auth/refresh?next=${encodeURIComponent(nextPath)}`);
+  }
+  redirect("/login");
+}
+
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
-  if (!user) throw new ApiError(401, "Nicht angemeldet.");
+  if (!user) redirectIfNoSessionButMaybeRefreshable();
   return user;
 }
 
@@ -287,6 +324,13 @@ export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
   if (!user.isAdmin) throw new ApiError(403, "Adminrechte erforderlich.");
   return user;
+}
+
+/** API /me: Access oder einmal Refresh. */
+export async function getSessionUserAllowingRefresh(): Promise<SessionUser | null> {
+  const direct = await getCurrentUser();
+  if (direct) return direct;
+  return tryRefreshSessionCookies();
 }
 
 export class ApiError extends Error {

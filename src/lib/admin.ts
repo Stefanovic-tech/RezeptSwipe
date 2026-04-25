@@ -1,5 +1,5 @@
 import { execute, query, queryOne, withTransaction, type RowDataPacket } from "./db";
-import { hashPassword } from "./hash";
+import { generateInviteCode, hashPassword, sha256Hex } from "./hash";
 import { ApiError } from "./session";
 import { logAdminAction } from "./audit";
 
@@ -21,6 +21,18 @@ export interface AdminUserSummary {
   createdAt: string;
   lastLoginAt: string | null;
   householdCount: number;
+}
+
+interface HouseholdRow extends RowDataPacket {
+  id: number;
+  name: string;
+  member_count: number;
+}
+
+export interface AdminHouseholdSummary {
+  id: number;
+  name: string;
+  memberCount: number;
 }
 
 export async function listUsers(search = ""): Promise<AdminUserSummary[]> {
@@ -48,6 +60,60 @@ export async function listUsers(search = ""): Promise<AdminUserSummary[]> {
     lastLoginAt: r.last_login_at,
     householdCount: r.household_count,
   }));
+}
+
+export async function listHouseholdsForAdmin(): Promise<AdminHouseholdSummary[]> {
+  const rows = await query<HouseholdRow>(
+    `SELECT h.id, h.name, COUNT(m.user_id) AS member_count
+       FROM households h
+       LEFT JOIN household_members m ON m.household_id = h.id
+      GROUP BY h.id, h.name
+      ORDER BY h.name ASC
+      LIMIT 500`
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    memberCount: Number(r.member_count) || 0,
+  }));
+}
+
+export async function adminCreateInvite(
+  actorId: number,
+  householdId: number,
+  options: { maxUses?: number; expiresInDays?: number | null } = {}
+): Promise<{ id: number; code: string }> {
+  const hh = await queryOne<RowDataPacket & { id: number }>(
+    "SELECT id FROM households WHERE id = ? LIMIT 1",
+    [householdId]
+  );
+  if (!hh) throw new ApiError(404, "Haushalt nicht gefunden.");
+
+  const code = generateInviteCode(8);
+  const codeHash = sha256Hex(code);
+  const preview = code.slice(0, 4) + "...";
+  const expiresAt =
+    options.expiresInDays && options.expiresInDays > 0
+      ? new Date(Date.now() + options.expiresInDays * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 19)
+          .replace("T", " ")
+      : null;
+
+  const result = await execute(
+    `INSERT INTO household_invites
+       (household_id, code_hash, code_preview, created_by, max_uses, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [householdId, codeHash, preview, actorId, Math.max(1, options.maxUses ?? 1), expiresAt]
+  );
+
+  await logAdminAction({
+    actorUserId: actorId,
+    action: "invite.created",
+    targetHouseholdId: householdId,
+    meta: { inviteId: result.insertId, maxUses: Math.max(1, options.maxUses ?? 1), expiresInDays: options.expiresInDays ?? null },
+  });
+  return { id: result.insertId, code };
 }
 
 export async function setUserBanned(

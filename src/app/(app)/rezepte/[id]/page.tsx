@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireUser, ApiError } from "@/lib/session";
-import { getCustomRecipe } from "@/lib/custom-recipes";
+import { requireUser } from "@/lib/session";
+import { getHouseholdRecipeView } from "@/lib/recipes";
 import RecipeForm, { type RecipeFormValues } from "../RecipeForm";
+import RecipeReadOnly from "../RecipeReadOnly";
 
 export const dynamic = "force-dynamic";
 
@@ -14,16 +15,27 @@ export default async function RezeptDetailPage({ params }: { params: { id: strin
   const id = Number(params.id);
   if (!Number.isInteger(id) || id <= 0) notFound();
 
-  let recipe;
-  try {
-    recipe = await getCustomRecipe(user.id, user.currentHouseholdId, id);
-  } catch (err) {
-    if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
-      notFound();
-    }
-    throw err;
+  const view = await getHouseholdRecipeView(user.id, user.currentHouseholdId, id);
+  if (!view) notFound();
+
+  if (view.mode === "readonly") {
+    return (
+      <div className="space-y-4">
+        <header className="space-y-1">
+          <Link href="/rezepte" className="text-sm text-brand-600 dark:text-brand-300">
+            &larr; Zurueck
+          </Link>
+          <h1 className="text-xl font-semibold">{view.recipe.title}</h1>
+          <p className="text-sm text-neutral-600 dark:text-neutral-300">
+            Nur lesen — Rezept aus der Datenbank ({view.source === "themealdb" ? "TheMealDB" : view.source}).
+          </p>
+        </header>
+        <RecipeReadOnly recipe={view.recipe} source={view.source} />
+      </div>
+    );
   }
 
+  const recipe = view.recipe;
   const initial: RecipeFormValues = {
     title: recipe.title,
     imageUrl: recipe.imageUrl ?? "",

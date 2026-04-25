@@ -1,5 +1,5 @@
 import { handle, jsonOk } from "@/lib/http";
-import { ApiError, requireUser } from "@/lib/session";
+import { ApiError, requireUserForApi } from "@/lib/session";
 import {
   createCustomRecipe,
   customRecipeInputSchema,
@@ -8,7 +8,7 @@ import {
 
 export async function GET() {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) {
       throw new ApiError(400, "Kein Haushalt ausgewaehlt.");
     }
@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) {
       throw new ApiError(400, "Kein Haushalt ausgewaehlt.");
     }

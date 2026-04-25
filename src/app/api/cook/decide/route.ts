@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { handle, jsonOk } from "@/lib/http";
-import { requireUser } from "@/lib/session";
+import { requireUserForApi } from "@/lib/session";
 import { decideCandidate } from "@/lib/cooking";
 
 const schema = z.object({
@@ -11,7 +11,7 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) return jsonOk({ ok: false });
     const body = schema.parse(await req.json());
     const result = await decideCandidate(

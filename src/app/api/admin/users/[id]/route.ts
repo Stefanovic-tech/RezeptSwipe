@@ -1,5 +1,5 @@
 import { handle, jsonOk } from "@/lib/http";
-import { requireAdmin } from "@/lib/session";
+import { requireAdminForApi } from "@/lib/session";
 import { deleteUser } from "@/lib/admin";
 
 export async function DELETE(
@@ -7,7 +7,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   return handle(async () => {
-    const admin = await requireAdmin();
+    const admin = await requireAdminForApi();
     const result = await deleteUser(admin.id, Number(params.id));
     return jsonOk(result);
   });

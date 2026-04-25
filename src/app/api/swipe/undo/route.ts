@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { handle, jsonOk } from "@/lib/http";
-import { requireUser } from "@/lib/session";
+import { requireUserForApi } from "@/lib/session";
 import { ensureMembership } from "@/lib/households";
 import { undoSwipeDecision } from "@/lib/recipes";
 
@@ -8,7 +8,7 @@ const schema = z.object({ recipeId: z.number().int().positive() });
 
 export async function POST(req: Request) {
   return handle(async () => {
-    const user = await requireUser();
+    const user = await requireUserForApi();
     if (!user.currentHouseholdId) return jsonOk({ ok: false });
     await ensureMembership(user.id, user.currentHouseholdId);
     const body = schema.parse(await req.json());

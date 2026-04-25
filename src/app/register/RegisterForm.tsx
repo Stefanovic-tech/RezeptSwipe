@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function RegisterForm() {
-  const router = useRouter();
   const [inviteCode, setInviteCode] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -67,8 +65,7 @@ export default function RegisterForm() {
           type="button"
           className="btn btn-primary w-full"
           onClick={() => {
-            router.push("/swipe");
-            router.refresh();
+            window.location.assign("/swipe");
           }}
         >
           Verstanden, weiter zu RezeptSwipe

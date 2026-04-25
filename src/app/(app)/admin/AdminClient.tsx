@@ -97,6 +97,7 @@ export default function AdminClient({
 
   return (
     <div className="space-y-4">
+      <h2 className="font-medium">Benutzer</h2>
       {info && <div className="card p-3 text-sm">{info}</div>}
       {error && <div className="card p-3 text-sm text-rose-600">{error}</div>}
       <input
