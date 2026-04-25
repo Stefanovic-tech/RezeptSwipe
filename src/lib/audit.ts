@@ -10,7 +10,7 @@ export async function logAdminAction(params: {
   await execute(
     `INSERT INTO admin_audit_log
        (actor_user_id, action, target_user_id, target_household_id, meta)
-     VALUES (?, ?, ?, ?, CAST(? AS JSON))`,
+     VALUES (?, ?, ?, ?, ?)`,
     [
       params.actorUserId,
       params.action,

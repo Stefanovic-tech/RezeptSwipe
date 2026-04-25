@@ -157,7 +157,7 @@ export async function createCustomRecipe(
          image_url, category, area, tags,
          is_vegetarian, is_vegan, has_pork, effort, est_minutes,
          ingredients_json, steps_json)
-       VALUES (?, ?, 'custom', ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON))`,
+       VALUES (?, ?, 'custom', ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
       [
         householdId,
         userId,
@@ -224,7 +224,7 @@ export async function updateCustomRecipe(
       `UPDATE recipe_cache
           SET title_de = ?, image_url = ?, category = ?, area = ?,
               is_vegetarian = ?, is_vegan = ?, has_pork = ?, effort = ?, est_minutes = ?,
-              ingredients_json = CAST(? AS JSON), steps_json = CAST(? AS JSON)
+              ingredients_json = ?, steps_json = ?
         WHERE id = ?`,
       [
         input.title,
