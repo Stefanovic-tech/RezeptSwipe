@@ -44,6 +44,21 @@ export function loadEnv() {
   for (const [k, v] of Object.entries(merged)) {
     if (process.env[k] === undefined) process.env[k] = v;
   }
+
+  // Fallback: Viele Server legen Secrets nur in .env.production ab, aber NODE_ENV
+  // ist beim manuellen `npm run seed` nicht immer "production". Wenn GEMINI_API_KEY
+  // danach noch fehlt, .env.production nachladen (ohne bestehende Werte zu ueberschreiben).
+  const gemini = (process.env.GEMINI_API_KEY || "").trim();
+  if (!gemini) {
+    for (const name of [".env.production.local", ".env.production"]) {
+      const filePath = path.join(ROOT_DIR, name);
+      if (!fs.existsSync(filePath)) continue;
+      const extra = parseEnv(fs.readFileSync(filePath, "utf8"));
+      for (const [k, v] of Object.entries(extra)) {
+        if (process.env[k] === undefined) process.env[k] = v;
+      }
+    }
+  }
   return process.env;
 }
 
