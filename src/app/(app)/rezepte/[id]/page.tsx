@@ -19,6 +19,11 @@ export default async function RezeptDetailPage({ params }: { params: { id: strin
   if (!view) notFound();
 
   if (view.mode === "readonly") {
+    let sourceLabel = view.source;
+    if (view.source === "themealdb") sourceLabel = "TheMealDB";
+    if (view.source === "custom") {
+      sourceLabel = "eigenes Haushaltsrezept (nur fuer Ersteller/Owner bearbeitbar)";
+    }
     return (
       <div className="space-y-4">
         <header className="space-y-1">
@@ -27,7 +32,7 @@ export default async function RezeptDetailPage({ params }: { params: { id: strin
           </Link>
           <h1 className="text-xl font-semibold">{view.recipe.title}</h1>
           <p className="text-sm text-neutral-600 dark:text-neutral-300">
-            Nur lesen — Rezept aus der Datenbank ({view.source === "themealdb" ? "TheMealDB" : view.source}).
+            Nur lesen — {sourceLabel}.
           </p>
         </header>
         <RecipeReadOnly recipe={view.recipe} source={view.source} />
@@ -68,7 +73,12 @@ export default async function RezeptDetailPage({ params }: { params: { id: strin
           Hinzugefuegt von {recipe.createdByUsername ?? "-"}.
         </p>
       </header>
-      <RecipeForm mode="edit" initial={initial} recipeId={recipe.id} />
+      <RecipeForm
+        mode="edit"
+        initial={initial}
+        recipeId={recipe.id}
+        canDelete={view.canDelete}
+      />
     </div>
   );
 }

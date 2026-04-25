@@ -58,11 +58,33 @@ async function translateMealToGerman(base) {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       }),
     });
-    if (!res.ok) return base;
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const errJson = await res.json();
+        detail = errJson?.error?.message ? ` — ${errJson.error.message}` : "";
+      } catch {
+        try {
+          detail = ` — ${(await res.text()).slice(0, 200)}`;
+        } catch {
+          /* ignore */
+        }
+      }
+      console.warn(`[gemini] HTTP ${res.status} fuer Modell ${model}${detail}`);
+      return base;
+    }
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     const parsed = parseJsonLoose(text);
-    if (!parsed || typeof parsed !== "object") return base;
+    if (!parsed || typeof parsed !== "object") {
+      const blockReason = data?.candidates?.[0]?.finishReason || data?.promptFeedback?.blockReason;
+      if (blockReason) {
+        console.warn(`[gemini] Kein parsebares JSON (finish/block: ${blockReason}).`);
+      } else {
+        console.warn("[gemini] Kein parsebares JSON in der Antwort, nutze Originaltext.");
+      }
+      return base;
+    }
 
     const translatedIngredients = Array.isArray(parsed.ingredients) ? parsed.ingredients : [];
     const translatedSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
@@ -95,7 +117,8 @@ async function translateMealToGerman(base) {
       ingredients: base.ingredients.map((ing, idx) => ({ ...ing, name: ingredientNames[idx] || ing.name })),
       steps: steps.length > 0 ? steps : base.steps,
     };
-  } catch {
+  } catch (e) {
+    console.warn(`[gemini] Uebersetzung fehlgeschlagen: ${e?.message || e}`);
     return base;
   }
 }
@@ -248,6 +271,14 @@ export async function syncMealDbRandomRecipes(conn, opts) {
   if (count === 0) {
     console.log("[mealdb] MEALDB_RANDOM_PER_RUN=0, ueberspringe TheMealDB.");
     return { inserted: 0, skipped: 0, errors: 0 };
+  }
+
+  const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
+  if (!geminiKey) {
+    console.warn(
+      "[mealdb] GEMINI_API_KEY ist leer — TheMealDB-Rezepte werden nicht uebersetzt. " +
+        "In Prod: Key in .env oder .env.production setzen und Seed erneut ausfuehren."
+    );
   }
 
   let inserted = 0;

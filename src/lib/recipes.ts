@@ -108,8 +108,18 @@ export type RezeptPageView =
         createdBy: number | null;
         createdByUsername: string | null;
       };
+      canDelete: boolean;
     }
   | { mode: "readonly"; recipe: RecipeDetail; source: string };
+
+function canManageCustomHouseholdRecipe(
+  role: "owner" | "member",
+  createdBy: number | null,
+  userId: number
+): boolean {
+  if (role === "owner") return true;
+  return createdBy != null && createdBy === userId;
+}
 
 /**
  * Rezept fuer /rezepte/[id]: globale Eintraege (z. B. TheMealDB) oder Haushalts-Rezepte.
@@ -120,7 +130,7 @@ export async function getHouseholdRecipeView(
   householdId: number,
   recipeId: number
 ): Promise<RezeptPageView | null> {
-  await ensureMembership(userId, householdId);
+  const role = await ensureMembership(userId, householdId);
   interface Row extends RecipeRow, RowDataPacket {
     household_id: number | null;
     created_by: number | null;
@@ -142,6 +152,10 @@ export async function getHouseholdRecipeView(
 
   const detail = rowToDetail(r);
   if (r.household_id === householdId && r.source === "custom") {
+    const canManage = canManageCustomHouseholdRecipe(role, r.created_by, userId);
+    if (!canManage) {
+      return { mode: "readonly", recipe: detail, source: "custom" };
+    }
     return {
       mode: "edit",
       recipe: {
@@ -149,6 +163,7 @@ export async function getHouseholdRecipeView(
         createdBy: r.created_by,
         createdByUsername: r.created_by_username,
       },
+      canDelete: true,
     };
   }
   return { mode: "readonly", recipe: detail, source: r.source };

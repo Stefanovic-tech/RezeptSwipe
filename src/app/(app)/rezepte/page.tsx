@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { listCustomRecipes } from "@/lib/custom-recipes";
 import { listSwipeHistory } from "@/lib/recipes";
+import DeleteRecipeButton from "./DeleteRecipeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -122,41 +123,48 @@ export default async function RezepteListPage() {
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {recipes.map((r) => (
               <li key={r.id} className="card overflow-hidden">
-                <Link href={`/rezepte/${r.id}`} className="block">
-                  {r.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={r.imageUrl}
-                      alt=""
-                      className="w-full aspect-video object-cover bg-neutral-200 dark:bg-neutral-800"
-                    />
-                  ) : (
-                    <div className="w-full aspect-video bg-gradient-to-br from-brand-100 to-brand-300 dark:from-brand-900 dark:to-brand-700 flex items-center justify-center text-3xl font-semibold text-white/80">
-                      {r.title.slice(0, 1).toUpperCase()}
+                <div className="flex flex-col">
+                  <Link href={`/rezepte/${r.id}`} className="block">
+                    {r.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.imageUrl}
+                        alt=""
+                        className="w-full aspect-video object-cover bg-neutral-200 dark:bg-neutral-800"
+                      />
+                    ) : (
+                      <div className="w-full aspect-video bg-gradient-to-br from-brand-100 to-brand-300 dark:from-brand-900 dark:to-brand-700 flex items-center justify-center text-3xl font-semibold text-white/80">
+                        {r.title.slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold leading-tight">{r.title}</h3>
+                        {r.liked ? (
+                          <span className="badge bg-emerald-200 dark:bg-emerald-900">gemerkt</span>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 text-xs">
+                        {r.category ? <span className="badge">{r.category}</span> : null}
+                        {r.area ? <span className="badge">{r.area}</span> : null}
+                        {r.estMinutes ? <span className="badge">~{r.estMinutes} Min.</span> : null}
+                        <span className="badge capitalize">{r.effort}</span>
+                        {r.isVegan ? <span className="badge bg-emerald-100 dark:bg-emerald-950">vegan</span> : null}
+                        {!r.isVegan && r.isVegetarian ? (
+                          <span className="badge bg-emerald-100 dark:bg-emerald-950">vegetarisch</span>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-neutral-500">
+                        Hinzugefuegt von {r.createdByUsername ?? "-"}
+                      </p>
                     </div>
-                  )}
-                  <div className="p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold leading-tight">{r.title}</h3>
-                      {r.liked ? (
-                        <span className="badge bg-emerald-200 dark:bg-emerald-900">gemerkt</span>
-                      ) : null}
+                  </Link>
+                  {r.canDelete ? (
+                    <div className="px-3 pb-3 flex justify-end">
+                      <DeleteRecipeButton recipeId={r.id} />
                     </div>
-                    <div className="flex flex-wrap gap-1.5 text-xs">
-                      {r.category ? <span className="badge">{r.category}</span> : null}
-                      {r.area ? <span className="badge">{r.area}</span> : null}
-                      {r.estMinutes ? <span className="badge">~{r.estMinutes} Min.</span> : null}
-                      <span className="badge capitalize">{r.effort}</span>
-                      {r.isVegan ? <span className="badge bg-emerald-100 dark:bg-emerald-950">vegan</span> : null}
-                      {!r.isVegan && r.isVegetarian ? (
-                        <span className="badge bg-emerald-100 dark:bg-emerald-950">vegetarisch</span>
-                      ) : null}
-                    </div>
-                    <p className="text-xs text-neutral-500">
-                      Hinzugefuegt von {r.createdByUsername ?? "-"}
-                    </p>
-                  </div>
-                </Link>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>

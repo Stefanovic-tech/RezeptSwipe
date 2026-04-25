@@ -27,7 +27,13 @@ function parseEnv(content) {
 }
 
 export function loadEnv() {
+  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
   const candidates = [".env.local", ".env"];
+  if (nodeEnv === "production") {
+    // Next.js nutzt in Prod typischerweise .env.production; Seed/Migrate-Skripte
+    // sollen dieselben Variablen sehen (z. B. GEMINI_API_KEY).
+    candidates.push(".env.production.local", ".env.production");
+  }
   const merged = {};
   for (const name of candidates) {
     const filePath = path.join(ROOT_DIR, name);

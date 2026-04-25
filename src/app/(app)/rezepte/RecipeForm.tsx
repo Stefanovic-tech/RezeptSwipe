@@ -35,6 +35,7 @@ interface Props {
   mode: "create" | "edit";
   initial: RecipeFormValues;
   recipeId?: number;
+  canDelete?: boolean;
 }
 
 function toApiPayload(values: RecipeFormValues) {
@@ -64,7 +65,7 @@ function toApiPayload(values: RecipeFormValues) {
   };
 }
 
-export default function RecipeForm({ mode, initial, recipeId }: Props) {
+export default function RecipeForm({ mode, initial, recipeId, canDelete = true }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<RecipeFormValues>(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -158,6 +159,7 @@ export default function RecipeForm({ mode, initial, recipeId }: Props) {
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler beim Loeschen.");
+    } finally {
       setDeleting(false);
     }
   }
@@ -369,7 +371,7 @@ export default function RecipeForm({ mode, initial, recipeId }: Props) {
             ? "Rezept erstellen"
             : "Aenderungen speichern"}
         </button>
-        {mode === "edit" ? (
+        {mode === "edit" && canDelete ? (
           <button
             type="button"
             disabled={deleting}

@@ -62,10 +62,20 @@ export interface CustomRecipeListItem extends RecipeListItem {
   createdByUsername: string | null;
   isMine: boolean;
   createdBy: number | null;
+  canDelete: boolean;
 }
 
 function genExternalId(): string {
   return `cust_${Date.now().toString(36)}_${randomBytes(4).toString("hex")}`;
+}
+
+export function canManageCustomRecipe(
+  role: "owner" | "member",
+  createdBy: number | null,
+  userId: number
+): boolean {
+  if (role === "owner") return true;
+  return createdBy != null && createdBy === userId;
 }
 
 function normalizeFlags(input: CustomRecipeInput): CustomRecipeInput {
@@ -79,7 +89,7 @@ export async function listCustomRecipes(
   userId: number,
   householdId: number
 ): Promise<CustomRecipeListItem[]> {
-  await ensureMembership(userId, householdId);
+  const role = await ensureMembership(userId, householdId);
   const rows = await query<ListRow>(
     `SELECT r.id, r.source, r.external_id, r.title_de, r.title_orig, r.image_url, r.category,
             r.area, r.tags, r.is_vegetarian, r.is_vegan, r.has_pork, r.effort, r.est_minutes,
@@ -100,6 +110,7 @@ export async function listCustomRecipes(
     createdByUsername: r.created_by_username,
     isMine: r.created_by === userId,
     createdBy: r.created_by,
+    canDelete: canManageCustomRecipe(role, r.created_by, userId),
   }));
 }
 
@@ -199,7 +210,7 @@ export async function updateCustomRecipe(
   recipeId: number,
   raw: CustomRecipeInput
 ): Promise<void> {
-  await ensureMembership(userId, householdId);
+  const role = await ensureMembership(userId, householdId);
   const input = normalizeFlags(raw);
 
   const ingredientsJson = JSON.stringify(
@@ -213,12 +224,18 @@ export async function updateCustomRecipe(
 
   await withTransaction(async (conn) => {
     const [rows] = await conn.query<
-      (RowDataPacket & { household_id: number | null })[]
-    >("SELECT household_id FROM recipe_cache WHERE id = ? LIMIT 1 FOR UPDATE", [recipeId]);
+      (RowDataPacket & { household_id: number | null; created_by: number | null })[]
+    >(
+      "SELECT household_id, created_by FROM recipe_cache WHERE id = ? LIMIT 1 FOR UPDATE",
+      [recipeId]
+    );
     const row = rows[0];
     if (!row) throw new ApiError(404, "Rezept nicht gefunden.");
     if (row.household_id !== householdId) {
       throw new ApiError(403, "Rezept gehoert zu einem anderen Haushalt.");
+    }
+    if (!canManageCustomRecipe(role, row.created_by, userId)) {
+      throw new ApiError(403, "Nur der Ersteller oder ein Owner darf das Rezept aendern.");
     }
     await conn.query(
       `UPDATE recipe_cache
@@ -249,7 +266,7 @@ export async function deleteCustomRecipe(
   householdId: number,
   recipeId: number
 ): Promise<void> {
-  await ensureMembership(userId, householdId);
+  const role = await ensureMembership(userId, householdId);
   return withTransaction(async (conn) => {
     const [rows] = await conn.query<
       (RowDataPacket & { household_id: number | null; created_by: number | null })[]
@@ -261,6 +278,9 @@ export async function deleteCustomRecipe(
     if (!row) throw new ApiError(404, "Rezept nicht gefunden.");
     if (row.household_id !== householdId) {
       throw new ApiError(403, "Rezept gehoert zu einem anderen Haushalt.");
+    }
+    if (!canManageCustomRecipe(role, row.created_by, userId)) {
+      throw new ApiError(403, "Nur der Ersteller oder ein Owner darf das Rezept loeschen.");
     }
     // Hard-Delete; Cascading FKs raeumen Swipe-State und Cooking-Choices auf.
     await conn.query("DELETE FROM recipe_cache WHERE id = ?", [recipeId]);
