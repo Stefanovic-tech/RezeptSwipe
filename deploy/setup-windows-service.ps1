@@ -2,7 +2,7 @@
 # Einmalig auf dem Server als Administrator ausfuehren.
 
 param(
-    [string]$AppRoot = "C:\apps\rezeptswipe"
+    [string]$AppRoot = "C:\webseite\rezeptswipe"
 )
 
 $ErrorActionPreference = "Stop"
