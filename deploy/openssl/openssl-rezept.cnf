@@ -1,0 +1,22 @@
+[ req ]
+default_bits        = 4096
+default_md          = sha256
+prompt              = no
+distinguished_name  = dn
+req_extensions      = req_ext
+
+[ dn ]
+C  = CH
+ST = Schweiz
+L  = Zuerich
+O  = krinulovic.ch
+OU = RezeptSwipe
+CN = rezept.krinulovic.ch
+
+[ req_ext ]
+subjectAltName = @alt_names
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+
+[ alt_names ]
+DNS.1 = rezept.krinulovic.ch

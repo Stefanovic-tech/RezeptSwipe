@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+@layer base {
+  button,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* Verhindert iOS-Zoom auf Fokus */
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center min-h-[44px] px-4 rounded-lg font-medium transition active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply bg-brand-500 text-white hover:bg-brand-600;
+  }
+  .btn-secondary {
+    @apply bg-neutral-200 text-neutral-900 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700;
+  }
+  .btn-danger {
+    @apply bg-rose-600 text-white hover:bg-rose-700;
+  }
+  .input {
+    @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-3 text-base placeholder:text-neutral-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 dark:border-neutral-700 dark:bg-neutral-900 dark:placeholder:text-neutral-500;
+  }
+  .card {
+    @apply rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-200 dark:bg-neutral-800;
+  }
+}
+
+.swipe-card {
+  /* pan-y verhindert auf vielen Geraeten zuverlaessiges horizontales Wischen */
+  touch-action: none;
+  user-select: none;
+}
