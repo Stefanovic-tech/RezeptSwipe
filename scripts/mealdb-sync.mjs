@@ -16,6 +16,29 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function geminiInterRequestDelayMs() {
+  const n = Number(process.env.GEMINI_REQUEST_DELAY_MS ?? 3500);
+  return Number.isFinite(n) && n >= 0 ? n : 3500;
+}
+
+function geminiMaxRetries() {
+  const n = Number(process.env.GEMINI_MAX_RETRIES ?? 8);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 20) : 8;
+}
+
+function geminiBackoffCapMs() {
+  const n = Number(process.env.GEMINI_BACKOFF_CAP_MS ?? 120_000);
+  return Number.isFinite(n) && n >= 1000 ? Math.min(Math.floor(n), 600_000) : 120_000;
+}
+
+function parseRetryAfterSecondsFromGeminiMessage(message) {
+  const m = String(message || "").match(/retry\s+in\s+([0-9]+(?:\.[0-9]+)?)s/i);
+  if (!m) return null;
+  const sec = Number(m[1]);
+  if (!Number.isFinite(sec) || sec <= 0) return null;
+  return sec;
+}
+
 function parseJsonLoose(text) {
   const raw = String(text || "").trim();
   if (!raw) return null;
@@ -49,74 +72,118 @@ async function translateMealToGerman(base) {
     JSON.stringify(base),
   ].join("\n");
 
+  const maxRetries = geminiMaxRetries();
+  const capMs = geminiBackoffCapMs();
+
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      }),
-    });
-    if (!res.ok) {
-      let detail = "";
-      try {
-        const errJson = await res.json();
-        detail = errJson?.error?.message ? ` — ${errJson.error.message}` : "";
-      } catch {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+        }),
+      });
+
+      const bodyText = await res.text();
+      let errMessage = "";
+      if (!res.ok) {
         try {
-          detail = ` — ${(await res.text()).slice(0, 200)}`;
+          const errJson = JSON.parse(bodyText);
+          errMessage = errJson?.error?.message ? String(errJson.error.message) : "";
         } catch {
-          /* ignore */
+          errMessage = bodyText.slice(0, 400);
         }
+
+        const retryable = res.status === 429 || res.status === 503 || res.status === 408;
+        if (retryable && attempt < maxRetries) {
+          const fromMsg = parseRetryAfterSecondsFromGeminiMessage(errMessage);
+          const headerRa = res.headers.get("retry-after");
+          const headerSec = headerRa ? Number(headerRa) : NaN;
+          const waitMs = Math.min(
+            capMs,
+            Math.max(
+              500,
+              fromMsg != null
+                ? Math.ceil(fromMsg * 1000) + 250
+                : Number.isFinite(headerSec) && headerSec > 0
+                  ? Math.ceil(headerSec * 1000) + 250
+                  : Math.min(capMs, 1500 * 2 ** (attempt - 1))
+            )
+          );
+          console.warn(
+            `[gemini] HTTP ${res.status} (Versuch ${attempt}/${maxRetries}), warte ${Math.round(
+              waitMs / 1000
+            )}s...`
+          );
+          await sleep(waitMs);
+          continue;
+        }
+
+        console.warn(`[gemini] HTTP ${res.status} fuer Modell ${model}${errMessage ? ` — ${errMessage}` : ""}`);
+        return base;
       }
-      console.warn(`[gemini] HTTP ${res.status} fuer Modell ${model}${detail}`);
-      return base;
-    }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    const parsed = parseJsonLoose(text);
-    if (!parsed || typeof parsed !== "object") {
-      const blockReason = data?.candidates?.[0]?.finishReason || data?.promptFeedback?.blockReason;
-      if (blockReason) {
-        console.warn(`[gemini] Kein parsebares JSON (finish/block: ${blockReason}).`);
-      } else {
-        console.warn("[gemini] Kein parsebares JSON in der Antwort, nutze Originaltext.");
+
+      let data;
+      try {
+        data = JSON.parse(bodyText);
+      } catch {
+        console.warn("[gemini] Ungueltige JSON-Antwort, nutze Originaltext.");
+        return base;
       }
-      return base;
+
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const parsed = parseJsonLoose(text);
+      if (!parsed || typeof parsed !== "object") {
+        const blockReason = data?.candidates?.[0]?.finishReason || data?.promptFeedback?.blockReason;
+        if (blockReason) {
+          console.warn(`[gemini] Kein parsebares JSON (finish/block: ${blockReason}).`);
+        } else {
+          console.warn("[gemini] Kein parsebares JSON in der Antwort, nutze Originaltext.");
+        }
+        return base;
+      }
+
+      const translatedIngredients = Array.isArray(parsed.ingredients) ? parsed.ingredients : [];
+      const translatedSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
+      const ingredientNames = base.ingredients.map((ing, idx) => {
+        const n = translatedIngredients[idx]?.name;
+        return typeof n === "string" && n.trim() ? n.trim() : ing.name;
+      });
+      const steps = translatedSteps
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean);
+
+      const out = {
+        ...base,
+        title_de:
+          typeof parsed.title_de === "string" && parsed.title_de.trim()
+            ? parsed.title_de.trim()
+            : base.title_de,
+        category:
+          typeof parsed.category === "string" && parsed.category.trim()
+            ? parsed.category.trim()
+            : base.category,
+        area:
+          typeof parsed.area === "string" && parsed.area.trim()
+            ? parsed.area.trim()
+            : base.area,
+        tags:
+          typeof parsed.tags === "string" && parsed.tags.trim()
+            ? parsed.tags.trim()
+            : base.tags,
+        ingredients: base.ingredients.map((ing, idx) => ({ ...ing, name: ingredientNames[idx] || ing.name })),
+        steps: steps.length > 0 ? steps : base.steps,
+      };
+
+      const pause = geminiInterRequestDelayMs();
+      if (pause > 0) await sleep(pause);
+      return out;
     }
 
-    const translatedIngredients = Array.isArray(parsed.ingredients) ? parsed.ingredients : [];
-    const translatedSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
-    const ingredientNames = base.ingredients.map((ing, idx) => {
-      const n = translatedIngredients[idx]?.name;
-      return typeof n === "string" && n.trim() ? n.trim() : ing.name;
-    });
-    const steps = translatedSteps
-      .map((s) => (typeof s === "string" ? s.trim() : ""))
-      .filter(Boolean);
-
-    return {
-      ...base,
-      title_de:
-        typeof parsed.title_de === "string" && parsed.title_de.trim()
-          ? parsed.title_de.trim()
-          : base.title_de,
-      category:
-        typeof parsed.category === "string" && parsed.category.trim()
-          ? parsed.category.trim()
-          : base.category,
-      area:
-        typeof parsed.area === "string" && parsed.area.trim()
-          ? parsed.area.trim()
-          : base.area,
-      tags:
-        typeof parsed.tags === "string" && parsed.tags.trim()
-          ? parsed.tags.trim()
-          : base.tags,
-      ingredients: base.ingredients.map((ing, idx) => ({ ...ing, name: ingredientNames[idx] || ing.name })),
-      steps: steps.length > 0 ? steps : base.steps,
-    };
+    console.warn(`[gemini] Abbruch nach ${maxRetries} Versuchen, nutze Originaltext.`);
+    return base;
   } catch (e) {
     console.warn(`[gemini] Uebersetzung fehlgeschlagen: ${e?.message || e}`);
     return base;
