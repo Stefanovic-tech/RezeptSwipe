@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { getHouseholdRecipeView } from "@/lib/recipes";
+import { ensureRecipeGermanBestEffort } from "@/lib/recipe-translate";
 import RecipeForm, { type RecipeFormValues } from "../RecipeForm";
 import RecipeReadOnly from "../RecipeReadOnly";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export default async function RezeptDetailPage({ params }: { params: { id: string } }) {
   const user = await requireUser();
@@ -14,6 +16,8 @@ export default async function RezeptDetailPage({ params }: { params: { id: strin
   }
   const id = Number(params.id);
   if (!Number.isInteger(id) || id <= 0) notFound();
+
+  await ensureRecipeGermanBestEffort(id);
 
   const view = await getHouseholdRecipeView(user.id, user.currentHouseholdId, id);
   if (!view) notFound();

@@ -46,10 +46,12 @@ export function loadEnv() {
   }
 
   // Fallback: Viele Server legen Secrets nur in .env.production ab, aber NODE_ENV
-  // ist beim manuellen `npm run seed` nicht immer "production". Wenn GEMINI_API_KEY
-  // danach noch fehlt, .env.production nachladen (ohne bestehende Werte zu ueberschreiben).
+  // ist beim manuellen `npm run seed` nicht immer "production". Wenn weder eine
+  // Ollama- noch eine Gemini-Konfiguration in den geladenen Dateien gefunden wurde,
+  // .env.production nachladen (ohne bestehende Werte zu ueberschreiben).
+  const ollama = (process.env.OLLAMA_MODEL || "").trim();
   const gemini = (process.env.GEMINI_API_KEY || "").trim();
-  if (!gemini) {
+  if (!ollama && !gemini) {
     for (const name of [".env.production.local", ".env.production"]) {
       const filePath = path.join(ROOT_DIR, name);
       if (!fs.existsSync(filePath)) continue;

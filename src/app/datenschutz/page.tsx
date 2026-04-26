@@ -13,8 +13,12 @@ export default function DatenschutzPage() {
         als Hash gespeichert. Wiederherstellung ueber persoenliche Recovery-Codes.
       </p>
       <p>
-        Eingesetzte Drittanbieter (sofern aktiv): Google Gemini fuer Uebersetzungen,
-        Sentry fuer Fehler-Telemetrie. Es werden nur die fuer die Funktion benoetigten
+        Uebersetzungen externer Rezepte erfolgen standardmaessig ueber ein lokal
+        betriebenes Sprachmodell (Ollama) auf dem App-Server; dabei verlassen die
+        Rezeptdaten den Server nicht. Optional kann als Fallback Google Gemini
+        konfiguriert werden — in diesem Fall werden Rezepttexte zur Uebersetzung
+        an Google uebermittelt. Sentry wird, sofern aktiv, fuer Fehler-Telemetrie
+        eingesetzt. Es werden nur die fuer die jeweilige Funktion benoetigten
         Daten uebertragen.
       </p>
       <p>

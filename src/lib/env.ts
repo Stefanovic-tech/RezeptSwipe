@@ -47,6 +47,12 @@ export const env = {
     model: read("GEMINI_MODEL", "gemini-2.5-flash"),
   },
 
+  ollama: {
+    baseUrl: read("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+    model: read("OLLAMA_MODEL", ""),
+    timeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 120000),
+  },
+
   recipeSource: {
     themealdbBaseUrl: read("THEMEALDB_BASE_URL", "https://www.themealdb.com/api/json/v1/1"),
   },

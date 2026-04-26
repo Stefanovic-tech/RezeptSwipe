@@ -3,6 +3,8 @@
  * Nutzt random.php (kein API-Key). Wird von seed.mjs aufgerufen.
  */
 
+import { ollamaConfigured, translateRecipeViaOllama } from "./ollama-translate.mjs";
+
 const SOURCE = "themealdb";
 
 function baseUrl() {
@@ -56,8 +58,17 @@ function parseJsonLoose(text) {
 }
 
 async function translateMealToGerman(base) {
+  if (ollamaConfigured()) {
+    const out = await translateRecipeViaOllama(base);
+    if (out) return { row: out, translated: true };
+    console.warn("[ollama] Uebersetzung fehlgeschlagen, fallback auf Gemini falls konfiguriert.");
+  }
+  return translateMealToGermanGemini(base);
+}
+
+async function translateMealToGermanGemini(base) {
   const apiKey = (process.env.GEMINI_API_KEY || "").trim();
-  if (!apiKey) return base;
+  if (!apiKey) return { row: base, translated: false };
   const model = (process.env.GEMINI_MODEL || "gemini-2.5-flash").trim();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
@@ -122,7 +133,7 @@ async function translateMealToGerman(base) {
         }
 
         console.warn(`[gemini] HTTP ${res.status} fuer Modell ${model}${errMessage ? ` — ${errMessage}` : ""}`);
-        return base;
+        return { row: base, translated: false };
       }
 
       let data;
@@ -130,7 +141,7 @@ async function translateMealToGerman(base) {
         data = JSON.parse(bodyText);
       } catch {
         console.warn("[gemini] Ungueltige JSON-Antwort, nutze Originaltext.");
-        return base;
+        return { row: base, translated: false };
       }
 
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -142,7 +153,7 @@ async function translateMealToGerman(base) {
         } else {
           console.warn("[gemini] Kein parsebares JSON in der Antwort, nutze Originaltext.");
         }
-        return base;
+        return { row: base, translated: false };
       }
 
       const translatedIngredients = Array.isArray(parsed.ingredients) ? parsed.ingredients : [];
@@ -179,14 +190,14 @@ async function translateMealToGerman(base) {
 
       const pause = geminiInterRequestDelayMs();
       if (pause > 0) await sleep(pause);
-      return out;
+      return { row: out, translated: true };
     }
 
     console.warn(`[gemini] Abbruch nach ${maxRetries} Versuchen, nutze Originaltext.`);
-    return base;
+    return { row: base, translated: false };
   } catch (e) {
     console.warn(`[gemini] Uebersetzung fehlgeschlagen: ${e?.message || e}`);
-    return base;
+    return { row: base, translated: false };
   }
 }
 
@@ -292,8 +303,8 @@ async function mapMealToRow(m) {
     ingredients,
     steps,
   };
-  const translated = await translateMealToGerman(base);
-  return translated;
+  const { row, translated } = await translateMealToGerman(base);
+  return { ...row, de_content_ready: translated ? 1 : 0 };
 }
 
 async function fetchRandomMeal() {
@@ -308,8 +319,9 @@ async function fetchRandomMeal() {
 const INSERT_SQL = `
   INSERT INTO recipe_cache
     (source, external_id, title_de, title_orig, image_url, category, area, tags,
-     is_vegetarian, is_vegan, has_pork, effort, est_minutes, ingredients_json, steps_json, raw_payload)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     is_vegetarian, is_vegan, has_pork, effort, est_minutes, ingredients_json, steps_json,
+     de_content_ready, raw_payload)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON DUPLICATE KEY UPDATE
     title_de = VALUES(title_de),
     title_orig = VALUES(title_orig),
@@ -324,6 +336,7 @@ const INSERT_SQL = `
     est_minutes = VALUES(est_minutes),
     ingredients_json = VALUES(ingredients_json),
     steps_json = VALUES(steps_json),
+    de_content_ready = GREATEST(de_content_ready, VALUES(de_content_ready)),
     raw_payload = VALUES(raw_payload),
     updated_at = CURRENT_TIMESTAMP
 `;
@@ -341,10 +354,17 @@ export async function syncMealDbRandomRecipes(conn, opts) {
   }
 
   const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
-  if (!geminiKey) {
+  const useOllama = ollamaConfigured();
+  if (!useOllama && !geminiKey) {
     console.warn(
-      "[mealdb] GEMINI_API_KEY ist leer — TheMealDB-Rezepte werden nicht uebersetzt. " +
-        "In Prod: Key in .env oder .env.production setzen und Seed erneut ausfuehren."
+      "[mealdb] Keine Uebersetzung konfiguriert (weder OLLAMA_MODEL noch GEMINI_API_KEY) — " +
+        "Rezepte werden im Originaltext gespeichert. Beim Oeffnen versucht die App, " +
+        "fehlende deutsche Inhalte ueber Ollama nachzuziehen."
+    );
+  } else if (useOllama) {
+    console.log(
+      `[mealdb] Uebersetzung via Ollama (${(process.env.OLLAMA_MODEL || "").trim()}). ` +
+        "Bei Fehlern erfolgt Fallback auf Gemini, sofern konfiguriert."
     );
   }
 
@@ -380,6 +400,7 @@ export async function syncMealDbRandomRecipes(conn, opts) {
         row.est_minutes,
         JSON.stringify(row.ingredients),
         JSON.stringify(row.steps),
+        row.de_content_ready ? 1 : 0,
         JSON.stringify({ idMeal: meal.idMeal, strMeal: meal.strMeal }),
       ]);
       inserted++;

@@ -192,6 +192,24 @@ async function runBaseline() {
       }
     }
 
+    if (!applied.has("003_recipe_de_content")) {
+      const [rows] = await conn.query(
+        `SELECT COUNT(*) AS c
+           FROM information_schema.columns
+          WHERE table_schema = DATABASE()
+            AND table_name = 'recipe_cache'
+            AND column_name = 'de_content_ready'`
+      );
+      if (Number(rows[0]?.c ?? 0) > 0) {
+        await conn.query(
+          `INSERT IGNORE INTO ${TABLE_NAME} (id) VALUES ('003_recipe_de_content')`
+        );
+        console.log(
+          "[baseline] recipe_cache.de_content_ready vorhanden -> 003_recipe_de_content als angewendet markiert."
+        );
+      }
+    }
+
     console.log("[baseline] fertig. Status mit 'npm run migrate:status' pruefen.");
   } finally {
     await conn.end();
