@@ -59,7 +59,14 @@ function parseJsonLoose(text) {
 
 async function translateMealToGerman(base) {
   if (ollamaConfigured()) {
+    const titleShort = String(base.title_de || "").slice(0, 70);
+    const timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS ?? 300_000);
+    console.log(
+      `[mealdb] Ollama: starte Uebersetzung fuer \"${titleShort}\" (Timeout ca. ${timeoutMs}ms, Modell ${(process.env.OLLAMA_MODEL || "").trim()})`
+    );
+    const t0 = Date.now();
     const out = await translateRecipeViaOllama(base);
+    console.log(`[mealdb] Ollama: fertig nach ${Date.now() - t0}ms (${out ? "OK" : "kein Ergebnis"})`);
     if (out) return { row: out, translated: true };
     console.warn("[ollama] Uebersetzung fehlgeschlagen, fallback auf Gemini falls konfiguriert.");
   }

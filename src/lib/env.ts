@@ -52,8 +52,13 @@ export const env = {
     model: read("OLLAMA_MODEL", ""),
     /** Ollama /api/chat Wartezeit (schwache CPU: eher 300000–600000). */
     timeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 300000),
-    /** Max. generierte Tokens (begrenzt Laufzeit, JSON-Rezept braucht typ. 2–6k). */
-    numPredict: readNumber("OLLAMA_NUM_PREDICT", 6144),
+    /** Max. generierte Tokens (zu hoch = lange CPU-Zeit bis Timeout). */
+    numPredict: readNumber("OLLAMA_NUM_PREDICT", 3072),
+    /**
+     * Ollama `format: "json"` — bei Llama oft sehr langsam/haengend. Standard aus;
+     * Antwort wird trotzdem mit parseJsonLoose ausgewertet.
+     */
+    jsonFormat: readBool("OLLAMA_JSON_FORMAT", false),
     /**
      * llama.cpp: Anzahl CPU-Threads pro Inferenz (0 = Ollama-Default, oft alle Kerne).
      * Auf geteiltem Host z. B. 2–4 setzen, damit andere Web-Apps Luft haben.

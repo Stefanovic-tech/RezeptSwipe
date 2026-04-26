@@ -18,12 +18,20 @@ function defaultModel() {
 
 function defaultTimeoutMs() {
   const n = Number(process.env.OLLAMA_TIMEOUT_MS ?? 300_000);
-  return Number.isFinite(n) && n >= 1000 ? Math.min(Math.floor(n), 600_000) : 300_000;
+  return Number.isFinite(n) && n >= 1000 ? Math.min(Math.floor(n), 1_800_000) : 300_000;
 }
 
 function defaultNumPredict() {
-  const n = Number(process.env.OLLAMA_NUM_PREDICT ?? 6144);
-  return Number.isFinite(n) && n >= 256 ? Math.min(Math.floor(n), 32768) : 6144;
+  const n = Number(process.env.OLLAMA_NUM_PREDICT ?? 3072);
+  return Number.isFinite(n) && n >= 256 ? Math.min(Math.floor(n), 32768) : 3072;
+}
+
+/** `format: json` ist bei Llama oft sehr langsam; Standard aus (Prompt + Parser reicht). */
+function useJsonFormat() {
+  const v = String(process.env.OLLAMA_JSON_FORMAT || "")
+    .trim()
+    .toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
 }
 
 function defaultNumThread() {
@@ -83,24 +91,27 @@ async function translateRecipeViaOllamaOnce(base, model, url, timeoutMs, numPred
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const payload = {
+      model,
+      stream: false,
+      options: ollamaChatOptions(numPredict),
+      messages: [
+        {
+          role: "system",
+          content:
+            "You translate cooking recipes to natural German. Output strict JSON matching the requested schema.",
+        },
+        { role: "user", content: buildPrompt(base) },
+      ],
+    };
+    if (useJsonFormat()) {
+      payload.format = "json";
+    }
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
-      body: JSON.stringify({
-        model,
-        stream: false,
-        format: "json",
-        options: ollamaChatOptions(numPredict),
-        messages: [
-          {
-            role: "system",
-            content:
-              "You translate cooking recipes to natural German. Output strict JSON matching the requested schema.",
-          },
-          { role: "user", content: buildPrompt(base) },
-        ],
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -180,7 +191,7 @@ export async function translateRecipeViaOllama(base) {
   const first = await translateRecipeViaOllamaOnce(base, model, url, timeoutBase, numPredict);
   if (first.kind === "ok") return first.data;
   if (first.kind === "timeout") {
-    const retryMs = Math.min(timeoutBase + 120_000, 600_000);
+    const retryMs = Math.min(timeoutBase + 120_000, 1_800_000);
     console.warn(`[ollama] zweiter Versuch (${retryMs}ms Timeout)...`);
     await sleep(1500);
     const second = await translateRecipeViaOllamaOnce(base, model, url, retryMs, numPredict);

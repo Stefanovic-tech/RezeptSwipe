@@ -114,24 +114,27 @@ async function translateRecipeViaOllamaOnce(
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const payload: Record<string, unknown> = {
+      model,
+      stream: false,
+      options: ollamaChatOptions(numPredict),
+      messages: [
+        {
+          role: "system",
+          content:
+            "You translate cooking recipes to natural German. Output strict JSON matching the requested schema.",
+        },
+        { role: "user", content: buildPrompt(base) },
+      ],
+    };
+    if (env.ollama.jsonFormat) {
+      payload.format = "json";
+    }
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
-      body: JSON.stringify({
-        model,
-        stream: false,
-        format: "json",
-        options: ollamaChatOptions(numPredict),
-        messages: [
-          {
-            role: "system",
-            content:
-              "You translate cooking recipes to natural German. Output strict JSON matching the requested schema.",
-          },
-          { role: "user", content: buildPrompt(base) },
-        ],
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -177,13 +180,13 @@ async function translateRecipeViaOllamaUnqueued(base: RecipeBase): Promise<Trans
 
   const baseUrl = env.ollama.baseUrl.trim().replace(/\/+$/, "");
   const url = `${baseUrl}/api/chat`;
-  const timeoutBase = Math.min(Math.max(env.ollama.timeoutMs, 1000), 600_000);
+  const timeoutBase = Math.min(Math.max(env.ollama.timeoutMs, 1000), 1_800_000);
   const numPredict = env.ollama.numPredict;
 
   const first = await translateRecipeViaOllamaOnce(base, model, url, timeoutBase, numPredict);
   if (first.kind === "ok") return first.data;
   if (first.kind === "timeout") {
-    const retryMs = Math.min(timeoutBase + 120_000, 600_000);
+    const retryMs = Math.min(timeoutBase + 120_000, 1_800_000);
     console.warn(`[ollama] zweiter Versuch (${retryMs}ms Timeout)...`);
     await new Promise((r) => setTimeout(r, 1500));
     const second = await translateRecipeViaOllamaOnce(base, model, url, retryMs, numPredict);
