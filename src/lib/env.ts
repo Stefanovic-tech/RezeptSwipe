@@ -54,6 +54,16 @@ export const env = {
     timeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 300000),
     /** Max. generierte Tokens (begrenzt Laufzeit, JSON-Rezept braucht typ. 2–6k). */
     numPredict: readNumber("OLLAMA_NUM_PREDICT", 6144),
+    /**
+     * llama.cpp: Anzahl CPU-Threads pro Inferenz (0 = Ollama-Default, oft alle Kerne).
+     * Auf geteiltem Host z. B. 2–4 setzen, damit andere Web-Apps Luft haben.
+     */
+    numThread: readNumber("OLLAMA_NUM_THREAD", 0),
+    /**
+     * Nur eine Ollama-Uebersetzung gleichzeitig pro Node-Prozess (weniger CPU-Spitzen
+     * bei mehreren Nutzern). Seed-Skript laeuft separat und ist ohnehin sequentiell.
+     */
+    serialize: readBool("OLLAMA_SERIALIZE", true),
   },
 
   recipeSource: {

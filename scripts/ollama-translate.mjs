@@ -26,6 +26,21 @@ function defaultNumPredict() {
   return Number.isFinite(n) && n >= 256 ? Math.min(Math.floor(n), 32768) : 6144;
 }
 
+function defaultNumThread() {
+  const n = Number(process.env.OLLAMA_NUM_THREAD ?? 0);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.max(Math.floor(n), 1), 64) : 0;
+}
+
+function ollamaChatOptions(numPredict) {
+  const opts = {
+    temperature: 0.2,
+    num_predict: numPredict,
+  };
+  const nt = defaultNumThread();
+  if (nt > 0) opts.num_thread = nt;
+  return opts;
+}
+
 function parseJsonLoose(text) {
   const raw = String(text || "").trim();
   if (!raw) return null;
@@ -76,10 +91,7 @@ async function translateRecipeViaOllamaOnce(base, model, url, timeoutMs, numPred
         model,
         stream: false,
         format: "json",
-        options: {
-          temperature: 0.2,
-          num_predict: numPredict,
-        },
+        options: ollamaChatOptions(numPredict),
         messages: [
           {
             role: "system",

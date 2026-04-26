@@ -92,6 +92,18 @@ function mapParsedToRecipe(base: RecipeBase, parsed: unknown): TranslatedRecipe 
 
 type AttemptOutcome = { kind: "ok"; data: TranslatedRecipe } | { kind: "timeout" } | { kind: "fail" };
 
+function ollamaChatOptions(numPredict: number): Record<string, number> {
+  const opts: Record<string, number> = {
+    temperature: 0.2,
+    num_predict: Math.min(Math.max(numPredict, 256), 32_768),
+  };
+  const nt = env.ollama.numThread;
+  if (nt > 0) {
+    opts.num_thread = Math.min(Math.max(Math.floor(nt), 1), 64);
+  }
+  return opts;
+}
+
 async function translateRecipeViaOllamaOnce(
   base: RecipeBase,
   model: string,
@@ -110,10 +122,7 @@ async function translateRecipeViaOllamaOnce(
         model,
         stream: false,
         format: "json",
-        options: {
-          temperature: 0.2,
-          num_predict: Math.min(Math.max(numPredict, 256), 32_768),
-        },
+        options: ollamaChatOptions(numPredict),
         messages: [
           {
             role: "system",
@@ -153,7 +162,16 @@ async function translateRecipeViaOllamaOnce(
   }
 }
 
-async function translateRecipeViaOllama(base: RecipeBase): Promise<TranslatedRecipe | null> {
+/** Eine Uebersetzung nach der anderen (weniger parallele CPU-Last). */
+let ollamaQueueTail: Promise<unknown> = Promise.resolve();
+
+function runOllamaExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const p = ollamaQueueTail.then(() => fn());
+  ollamaQueueTail = p.catch(() => {});
+  return p;
+}
+
+async function translateRecipeViaOllamaUnqueued(base: RecipeBase): Promise<TranslatedRecipe | null> {
   const model = env.ollama.model.trim();
   if (!model) return null;
 
@@ -172,6 +190,13 @@ async function translateRecipeViaOllama(base: RecipeBase): Promise<TranslatedRec
     if (second.kind === "ok") return second.data;
   }
   return null;
+}
+
+async function translateRecipeViaOllama(base: RecipeBase): Promise<TranslatedRecipe | null> {
+  if (!env.ollama.serialize) {
+    return translateRecipeViaOllamaUnqueued(base);
+  }
+  return runOllamaExclusive(() => translateRecipeViaOllamaUnqueued(base));
 }
 
 /**
