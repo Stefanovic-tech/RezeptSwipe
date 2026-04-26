@@ -11,6 +11,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# scripts/_env.mjs laedt .env.production nur bei NODE_ENV=production (Migrate/Seed/Build).
+$env:NODE_ENV = "production"
 Set-Location $AppRoot
 
 Write-Host ('[deploy] cwd: ' + (Get-Location))

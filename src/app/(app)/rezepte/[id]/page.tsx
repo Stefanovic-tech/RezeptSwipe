@@ -7,7 +7,7 @@ import RecipeForm, { type RecipeFormValues } from "../RecipeForm";
 import RecipeReadOnly from "../RecipeReadOnly";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export default async function RezeptDetailPage({ params }: { params: { id: string } }) {
   const user = await requireUser();

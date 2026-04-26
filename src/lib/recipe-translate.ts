@@ -52,14 +52,53 @@ export function ollamaConfigured(): boolean {
   return Boolean(env.ollama.model.trim());
 }
 
-async function translateRecipeViaOllama(base: RecipeBase): Promise<TranslatedRecipe | null> {
-  const model = env.ollama.model.trim();
-  if (!model) return null;
+function mapParsedToRecipe(base: RecipeBase, parsed: unknown): TranslatedRecipe | null {
+  if (!parsed || typeof parsed !== "object") {
+    console.warn("[ollama] Kein parsebares JSON in der Antwort, nutze Originaltext.");
+    return null;
+  }
+  const p = parsed as {
+    title_de?: unknown;
+    category?: unknown;
+    area?: unknown;
+    tags?: unknown;
+    ingredients?: unknown;
+    steps?: unknown;
+  };
+  const translatedIngredients = Array.isArray(p.ingredients) ? p.ingredients : [];
+  const translatedSteps = Array.isArray(p.steps) ? p.steps : [];
+  const ingredients: Ingredient[] = base.ingredients.map((ing, idx) => {
+    const cand = (translatedIngredients[idx] as { name?: unknown } | undefined)?.name;
+    return {
+      ...ing,
+      name: typeof cand === "string" && cand.trim() ? cand.trim() : ing.name,
+    };
+  });
+  const steps = translatedSteps
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean);
+  return {
+    ...base,
+    title_de:
+      typeof p.title_de === "string" && p.title_de.trim() ? p.title_de.trim() : base.title_de,
+    category:
+      typeof p.category === "string" && p.category.trim() ? p.category.trim() : base.category,
+    area: typeof p.area === "string" && p.area.trim() ? p.area.trim() : base.area,
+    tags: typeof p.tags === "string" && p.tags.trim() ? p.tags.trim() : base.tags,
+    ingredients,
+    steps: steps.length > 0 ? steps : base.steps,
+  };
+}
 
-  const baseUrl = env.ollama.baseUrl.trim().replace(/\/+$/, "");
-  const url = `${baseUrl}/api/chat`;
-  const timeoutMs = Math.min(Math.max(env.ollama.timeoutMs, 1000), 600_000);
+type AttemptOutcome = { kind: "ok"; data: TranslatedRecipe } | { kind: "timeout" } | { kind: "fail" };
 
+async function translateRecipeViaOllamaOnce(
+  base: RecipeBase,
+  model: string,
+  url: string,
+  timeoutMs: number,
+  numPredict: number
+): Promise<AttemptOutcome> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -71,7 +110,10 @@ async function translateRecipeViaOllama(base: RecipeBase): Promise<TranslatedRec
         model,
         stream: false,
         format: "json",
-        options: { temperature: 0.2 },
+        options: {
+          temperature: 0.2,
+          num_predict: Math.min(Math.max(numPredict, 256), 32_768),
+        },
         messages: [
           {
             role: "system",
@@ -88,64 +130,48 @@ async function translateRecipeViaOllama(base: RecipeBase): Promise<TranslatedRec
       console.warn(
         `[ollama] HTTP ${res.status} (${model})${errText ? ` — ${errText.slice(0, 240)}` : ""}`
       );
-      return null;
+      return { kind: "fail" };
     }
 
     const data: { message?: { content?: string }; response?: string } | null = await res
       .json()
       .catch(() => null);
     const text = data?.message?.content ?? data?.response ?? "";
-    const parsed = parseJsonLoose(text);
-    if (!parsed || typeof parsed !== "object") {
-      console.warn("[ollama] Kein parsebares JSON in der Antwort, nutze Originaltext.");
-      return null;
-    }
-
-    const p = parsed as {
-      title_de?: unknown;
-      category?: unknown;
-      area?: unknown;
-      tags?: unknown;
-      ingredients?: unknown;
-      steps?: unknown;
-    };
-
-    const translatedIngredients = Array.isArray(p.ingredients) ? p.ingredients : [];
-    const translatedSteps = Array.isArray(p.steps) ? p.steps : [];
-
-    const ingredients: Ingredient[] = base.ingredients.map((ing, idx) => {
-      const cand = (translatedIngredients[idx] as { name?: unknown } | undefined)?.name;
-      return {
-        ...ing,
-        name: typeof cand === "string" && cand.trim() ? cand.trim() : ing.name,
-      };
-    });
-    const steps = translatedSteps
-      .map((s) => (typeof s === "string" ? s.trim() : ""))
-      .filter(Boolean);
-
-    return {
-      ...base,
-      title_de:
-        typeof p.title_de === "string" && p.title_de.trim() ? p.title_de.trim() : base.title_de,
-      category:
-        typeof p.category === "string" && p.category.trim() ? p.category.trim() : base.category,
-      area: typeof p.area === "string" && p.area.trim() ? p.area.trim() : base.area,
-      tags: typeof p.tags === "string" && p.tags.trim() ? p.tags.trim() : base.tags,
-      ingredients,
-      steps: steps.length > 0 ? steps : base.steps,
-    };
+    const mapped = mapParsedToRecipe(base, parseJsonLoose(text));
+    if (!mapped) return { kind: "fail" };
+    return { kind: "ok", data: mapped };
   } catch (e) {
     const err = e as { name?: string; message?: string };
     if (err?.name === "AbortError") {
       console.warn(`[ollama] Timeout nach ${timeoutMs}ms.`);
-    } else {
-      console.warn(`[ollama] Uebersetzung fehlgeschlagen: ${err?.message || e}`);
+      return { kind: "timeout" };
     }
-    return null;
+    console.warn(`[ollama] Uebersetzung fehlgeschlagen: ${err?.message || e}`);
+    return { kind: "fail" };
   } finally {
     clearTimeout(t);
   }
+}
+
+async function translateRecipeViaOllama(base: RecipeBase): Promise<TranslatedRecipe | null> {
+  const model = env.ollama.model.trim();
+  if (!model) return null;
+
+  const baseUrl = env.ollama.baseUrl.trim().replace(/\/+$/, "");
+  const url = `${baseUrl}/api/chat`;
+  const timeoutBase = Math.min(Math.max(env.ollama.timeoutMs, 1000), 600_000);
+  const numPredict = env.ollama.numPredict;
+
+  const first = await translateRecipeViaOllamaOnce(base, model, url, timeoutBase, numPredict);
+  if (first.kind === "ok") return first.data;
+  if (first.kind === "timeout") {
+    const retryMs = Math.min(timeoutBase + 120_000, 600_000);
+    console.warn(`[ollama] zweiter Versuch (${retryMs}ms Timeout)...`);
+    await new Promise((r) => setTimeout(r, 1500));
+    const second = await translateRecipeViaOllamaOnce(base, model, url, retryMs, numPredict);
+    if (second.kind === "ok") return second.data;
+  }
+  return null;
 }
 
 /**

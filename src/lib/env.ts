@@ -50,7 +50,10 @@ export const env = {
   ollama: {
     baseUrl: read("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
     model: read("OLLAMA_MODEL", ""),
-    timeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 120000),
+    /** Ollama /api/chat Wartezeit (schwache CPU: eher 300000–600000). */
+    timeoutMs: readNumber("OLLAMA_TIMEOUT_MS", 300000),
+    /** Max. generierte Tokens (begrenzt Laufzeit, JSON-Rezept braucht typ. 2–6k). */
+    numPredict: readNumber("OLLAMA_NUM_PREDICT", 6144),
   },
 
   recipeSource: {

@@ -7,7 +7,7 @@ import type { SwipeEmptyHint } from "./empty-hint";
 import SwipeDeck from "./SwipeDeck";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export default async function SwipePage() {
   const user = await requireUser();
