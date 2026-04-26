@@ -19,6 +19,14 @@ Write-Host "[deploy] git pull"
 & git pull --ff-only
 if ($LASTEXITCODE -ne 0) { throw "git pull failed" }
 
+# Windows: laufende Next/Node-Prozesse halten native Module (z. B. argon2*.node)
+# offen -> npm ci schlaegt mit EPERM unlink fehl. App kurz stoppen.
+Write-Host "[deploy] pm2 stop (Windows: node_modules fuer npm ci freigeben)"
+& pm2 stop rezeptswipe 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[deploy] pm2 stop meldet Exit $($LASTEXITCODE) (App lief evtl. nicht) — fortfahren."
+}
+
 Write-Host "[deploy] npm ci"
 & npm ci --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
